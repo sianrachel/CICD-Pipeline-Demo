@@ -78,15 +78,156 @@ argocd/application.yml      what Argo CD watches and where it deploys
 
 ---
 
-## 🏃‍♀️ Run it locally
+## 🛠️ Run it yourself
+
+There are three levels. Go as deep as you like.
+
+### Prerequisites
+
+| Tool | Needed for | Install (macOS) |
+|---|---|---|
+| [uv](https://docs.astral.sh/uv/) | Level 1 | `brew install uv` |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Levels 2 and 3 | Download, then start it |
+| [kind](https://kind.sigs.k8s.io/) | Level 3 | `brew install kind` |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Level 3 | `brew install kubectl` |
+
+```bash
+git clone https://github.com/sianrachel/CICD-Pipeline-Demo.git
+cd CICD-Pipeline-Demo
+```
+
+### 🐍 Level 1: Run the app
 
 ```bash
 uv sync                                   # install from the lockfile
 uv run pytest                             # run the tests
-uv run uvicorn app.main:app --reload      # http://127.0.0.1:8000/healthz
-docker build -t scenario-api .            # build the image
-uv run pre-commit install                 # enable the git hooks
+uv run uvicorn app.main:app --reload      # start the API
 ```
+
+Open http://127.0.0.1:8000/healthz, http://127.0.0.1:8000/scenarios or the interactive docs at http://127.0.0.1:8000/docs.
+
+Optional, if you're contributing: `uv run pre-commit install` enables the git hooks.
+
+### 🐳 Level 2: Run it in Docker
+
+**Build it yourself:**
+
+```bash
+docker build -t scenario-api .
+docker run --rm -p 8000:8000 scenario-api
+```
+
+**Or pull the exact image CI published** (the tag currently deployed is in `k8s/kustomization.yml`):
+
+```bash
+TAG=$(grep newTag k8s/kustomization.yml | awk '{print $2}')
+docker run --rm -p 8000:8000 ghcr.io/sianrachel/cicd-pipeline-demo:$TAG
+```
+
+Then open http://127.0.0.1:8000/healthz. Stop it with `Ctrl+C`.
+
+Run `docker build` a second time and every layer comes back `CACHED`. That's the layer-caching design at work.
+
+### ☸️ Level 3: The full GitOps setup (Kubernetes + Argo CD)
+
+This runs a real Kubernetes cluster on your machine with Argo CD deploying the app from this repo.
+
+**1. Create a local cluster**
+
+```bash
+kind create cluster --name argo-demo
+```
+
+**2. Install Argo CD** (pinned version)
+
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd --server-side \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.6/manifests/install.yaml
+kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+```
+
+**3. Point Argo CD at this repo**
+
+```bash
+kubectl apply -f argocd/application.yml
+```
+
+**4. Open the Argo CD UI**
+
+```bash
+# admin password
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d; echo
+
+# UI (leave this running)
+kubectl -n argocd port-forward svc/argocd-server 8443:443
+```
+
+Go to **https://localhost:8443**, accept the self-signed certificate warning, and log in as `admin`. You'll see `scenario-api` synced and healthy: a Service, a Deployment and two pods. 💚
+
+**5. Call the app in the cluster** (in a second terminal)
+
+```bash
+kubectl -n scenario-api port-forward svc/scenario-api 8080:80
+```
+
+Then open http://localhost:8080/healthz.
+
+**6. See self-heal in action**
+
+```bash
+kubectl -n scenario-api scale deploy/scenario-api --replicas=5
+```
+
+Watch Argo CD put it straight back to 2. Git is the source of truth, and manual changes don't stick.
+
+**7. Clean up**
+
+```bash
+kind delete cluster --name argo-demo
+```
+
+<details>
+<summary>🍴 <b>Running your own fork</b></summary>
+
+To have *your* pushes deploy to *your* cluster:
+
+1. Fork the repo and enable Actions on the fork.
+2. Under **Settings → Actions → General → Workflow permissions**, select **Read and write**, so the deploy job can commit.
+3. In `argocd/application.yml`, change `repoURL` to your fork.
+4. In `k8s/kustomization.yml`, change `newName` to `ghcr.io/<your-username>/<your-repo-name>` (lowercase).
+5. Push to `main`, wait for the pipeline to go green, and make the published package public under **Packages → Package settings**.
+
+</details>
+
+<details>
+<summary>🔒 <b>Using a private repo or private image</b></summary>
+
+Argo CD needs credentials to read the repo, and the cluster needs credentials to pull the image. With the GitHub CLI:
+
+```bash
+gh auth refresh -s read:packages
+
+# Argo CD → private repo
+kubectl -n argocd create secret generic repo-cicd \
+  --from-literal=type=git \
+  --from-literal=url=https://github.com/<owner>/<repo>.git \
+  --from-literal=username=<owner> \
+  --from-literal=password="$(gh auth token)"
+kubectl -n argocd label secret repo-cicd argocd.argoproj.io/secret-type=repository
+
+# Cluster → private image (the deployment references this secret)
+kubectl create namespace scenario-api
+kubectl -n scenario-api create secret docker-registry ghcr-creds \
+  --docker-server=ghcr.io \
+  --docker-username=<owner> \
+  --docker-password="$(gh auth token)"
+```
+
+Do this between steps 2 and 3. For anything beyond a local demo, use a dedicated read-only token or a GitHub App, managed by something like External Secrets.
+
+</details>
 
 ---
 
@@ -102,4 +243,3 @@ uv run pre-commit install                 # enable the git hooks
 ---
 
 <sub>🐍 Python · ⚡ uv · 🐳 Docker · ⚙️ GitHub Actions · ☸️ Kubernetes · 🐙 Argo CD</sub>
-
