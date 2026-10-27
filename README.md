@@ -90,7 +90,13 @@ uv run pytest                             # run the tests
 uv run uvicorn app.main:app --reload      # start the API
 ```
 
-Open http://127.0.0.1:8000/healthz, or the interactive docs at http://127.0.0.1:8000/docs.
+Then open:
+
+| URL | What you'll see |
+|---|---|
+| http://127.0.0.1:8000/healthz | Health check: `{"status":"ok"}` |
+| http://127.0.0.1:8000/scenarios | The list of driving scenarios |
+| http://127.0.0.1:8000/docs | Interactive API docs |
 
 ---
 
@@ -103,7 +109,7 @@ docker build -t scenario-api .
 docker run --rm -p 8000:8000 scenario-api
 ```
 
-Open http://127.0.0.1:8000/healthz. Stop it with `Ctrl+C`.
+Then open http://127.0.0.1:8000/healthz. Press `Ctrl+C` to stop.
 
 Run `docker build` a second time and every layer comes back `CACHED`. That's the layer caching at work.
 
