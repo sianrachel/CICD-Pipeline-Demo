@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- deployment.yaml
+- service.yaml
+images:
+- name: scenario-api
+  newName: ghcr.io/sianrachel/cicd-pipeline-demo
+  newTag: 09579441258c341347573e96ca86c1bda348fa31
