@@ -6,4 +6,4 @@ resources:
 images:
 - name: scenario-api
   newName: ghcr.io/sianrachel/cicd-pipeline-demo
-  newTag: 6144f6c2b1ff532d1ece08a77f29b662b38c990d
+  newTag: 2dbb5242fac68eefd6f13100f3dc4b95050ab83a
